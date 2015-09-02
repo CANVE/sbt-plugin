@@ -7,9 +7,10 @@ import sbt._
 
 object ExtractorSbtPlugin extends AutoPlugin {
 
-  val compilerPluginOrg = "matanster"
+  val compilerPluginOrg = "canve"
   val compilerPluginVersion = "0.0.1"
-  val compilerPluginArtifact = "extractor"
+  val compilerPluginArtifact = "compiler-plugin"
+  val compilerPluginNameProperty = "canve" // this is defined in the compiler plugin's code
 
   val aggregateFilter = ScopeFilter( inAggregates(ThisProject), inConfigurations(Compile) ) // must be outside of the 'coverageAggregate' task (see: https://github.com/sbt/sbt/issues/1095 or https://github.com/sbt/sbt/issues/780)
 
@@ -32,7 +33,7 @@ object ExtractorSbtPlugin extends AutoPlugin {
     val extracted = Project.extract(state)
     val newSettings = extracted.structure.allProjectRefs map { projRef =>
       val projectName = projRef.project
-      println("CANVE instrumenting project " + projectName)
+      println("canve instrumenting project " + projectName)
       
       lazy val ScalacOptions = Def.task {
         // search for the compiler plugin
@@ -40,8 +41,9 @@ object ExtractorSbtPlugin extends AutoPlugin {
         deps.find(_.getAbsolutePath.contains(compilerPluginArtifact)) match {
           case None => throw new Exception(s"Fatal: compilerPluginArtifact not in libraryDependencies")
           case Some(pluginPath) => 
-            Seq(Some(s"-Xplugin:${pluginPath.getAbsolutePath}"),
-                Some(s"-P:CANVE:projectName:$projectName")).flatten
+            Seq(Some(s"-Xplugin:${pluginPath.getAbsolutePath}"),                 // hooks in the compiler plugin
+                Some(s"-P:$compilerPluginNameProperty:projectName:$projectName") // passes the project name
+                ).flatten
         }
       }
       scalacOptions in projRef ++= ScalacOptions.value
@@ -49,5 +51,5 @@ object ExtractorSbtPlugin extends AutoPlugin {
     extracted.append(newSettings, state)
   }
 
-  println("Sbt CANVE plugin loaded - use canve-instrument to run CANVE during every compilation")
+  println("sbt canve plugin loaded - use canve-instrument to run canve as part of every compilation")
 }

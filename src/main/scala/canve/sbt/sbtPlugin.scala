@@ -11,6 +11,8 @@ object ExtractorSbtPlugin extends AutoPlugin {
   val compilerPluginVersion = "0.0.1"
   val compilerPluginArtifact = "compiler-plugin"
   val compilerPluginNameProperty = "canve" // this is defined in the compiler plugin's code
+    
+  val sbtCommandName = "canve-enable"
 
   val aggregateFilter = ScopeFilter( inAggregates(ThisProject), inConfigurations(Compile) ) // must be outside of the 'coverageAggregate' task (see: https://github.com/sbt/sbt/issues/1095 or https://github.com/sbt/sbt/issues/780)
 
@@ -19,7 +21,7 @@ object ExtractorSbtPlugin extends AutoPlugin {
 
   // global settings needed for the bootstrap
   override lazy val projectSettings = Seq(
-    commands += Command.command("canve-enable", 
+    commands += Command.command(sbtCommandName, 
                                 "Instruments all projects in the current build definition such that they run canve during compilation",
                                 "Instrument all projects in the current build definition such that they run canve during compilation")
                                 (instrument()),
@@ -41,9 +43,11 @@ object ExtractorSbtPlugin extends AutoPlugin {
         deps.find(_.getAbsolutePath.contains(compilerPluginArtifact)) match {
           case None => throw new Exception(s"Fatal: compilerPluginArtifact not in libraryDependencies")
           case Some(pluginPath) => 
-            Seq(Some(s"-Xplugin:${pluginPath.getAbsolutePath}"),                 // hooks in the compiler plugin
-                Some(s"-P:$compilerPluginNameProperty:projectName:$projectName") // passes the project name
-                ).flatten
+            Seq(
+              Some(s"-Yrangepos"),                                             // enables obtaining source ranges in the compiler plugin
+              Some(s"-Xplugin:${pluginPath.getAbsolutePath}"),                 // hooks in the compiler plugin
+              Some(s"-P:$compilerPluginNameProperty:projectName:$projectName") // passes the project name
+            ).flatten
         }
       }
       scalacOptions in projRef ++= ScalacOptions.value
@@ -51,5 +55,5 @@ object ExtractorSbtPlugin extends AutoPlugin {
     extracted.append(newSettings, state)
   }
 
-  println("sbt canve plugin loaded - use canve-instrument to run canve as part of every compilation")
+  println("sbt canve plugin loaded - use " + sbtCommandName + " to run canve as part of every compilation")
 }

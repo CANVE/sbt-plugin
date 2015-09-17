@@ -4,8 +4,6 @@ name := "sbt-plugin"
 
 sbtPlugin := true
 
-//addCompilerPlugin("matanster" %% "extractor" % "0.0.1")
-
 scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 
 resolvers ++= {

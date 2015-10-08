@@ -6,6 +6,8 @@ sbtPlugin := true
 
 scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 
+libraryDependencies ++= Seq("canve" %% "compiler-plugin" % "0.0.1")
+
 resolvers ++= {
   if(isSnapshot.value) Seq(Resolver.mavenLocal, Resolver.sonatypeRepo("snapshots"))
   else Seq.empty

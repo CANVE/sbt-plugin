@@ -3,3 +3,7 @@ target
 *.iml
 .credentials
 credentials.sbt
+.classpath
+.settings
+.cache-main
+/bin/

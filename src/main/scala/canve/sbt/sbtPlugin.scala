@@ -18,17 +18,20 @@ object ExtractorSbtPlugin extends AutoPlugin {
 
   override def requires = plugins.JvmPlugin
   override def trigger = allRequirements
-
+  
   // global settings needed for the bootstrap
   override lazy val projectSettings = Seq(
     commands += Command.command(sbtCommandName, 
                                 "Instruments all projects in the current build definition such that they run canve during compilation",
                                 "Instrument all projects in the current build definition such that they run canve during compilation")
                                 (instrument()),
-    libraryDependencies += compilerPluginOrg % (compilerPluginArtifact + "_" + scalaBinaryVersion.value) % compilerPluginVersion % "provided" intransitive()
+
+    libraryDependencies += compilerPluginOrg % (compilerPluginArtifact + "_" + scalaBinaryVersion.value) % compilerPluginVersion % "provided",
     
-    // TODO: replace the following by project specific scalacOptions
-    // scalacOptions in(Compile, compile) ++= ScalacOptions.value 
+    compile in Compile <<= (compile in Compile) map { compileAnalysis =>
+      println("has run after compile")
+      compileAnalysis
+    }
   )
 
   private def instrument(): State => State = { state =>

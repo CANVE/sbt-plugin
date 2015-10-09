@@ -6,4 +6,4 @@ credentials.sbt
 .classpath
 .settings
 .cache-main
-/bin/
+bin/

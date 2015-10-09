@@ -12,31 +12,31 @@ object ExtractorSbtPlugin extends AutoPlugin {
   val compilerPluginArtifact = "compiler-plugin"
   val compilerPluginNameProperty = "canve" // this is defined in the compiler plugin's code
     
-  val sbtCommandName = "canve-enable"
+  val sbtLegacyCommandName = "canve"
 
-  val aggregateFilter = ScopeFilter( inAggregates(ThisProject), inConfigurations(Compile) ) // must be outside of the 'coverageAggregate' task (see: https://github.com/sbt/sbt/issues/1095 or https://github.com/sbt/sbt/issues/780)
+  val sbtCommandName = "canve"
+
+  // see: https://github.com/sbt/sbt/issues/1095 or https://github.com/sbt/sbt/issues/780
+  val aggregateFilter: ScopeFilter.ScopeFilter = ScopeFilter( inAggregates(ThisProject), inConfigurations(Compile) ) 
 
   override def requires = plugins.JvmPlugin
   override def trigger = allRequirements
-  
+
   // global settings needed for the bootstrap
   override lazy val projectSettings = Seq(
-    commands += Command.command(sbtCommandName, 
+    commands += Command.command(sbtLegacyCommandName,
                                 "Instruments all projects in the current build definition such that they run canve during compilation",
                                 "Instrument all projects in the current build definition such that they run canve during compilation")
                                 (instrument()),
 
-    libraryDependencies += compilerPluginOrg % (compilerPluginArtifact + "_" + scalaBinaryVersion.value) % compilerPluginVersion % "provided",
+    libraryDependencies += compilerPluginOrg % (compilerPluginArtifact + "_" + scalaBinaryVersion.value) % compilerPluginVersion % "provided"
     
-    compile in Compile <<= (compile in Compile) map { compileAnalysis =>
-      println("has run after compile")
-      compileAnalysis
-    }
   )
 
   private def instrument(): State => State = { state =>
-    val extracted = Project.extract(state)
-    val newSettings = extracted.structure.allProjectRefs map { projRef =>
+    val extracted: Extracted = Project.extract(state)
+    val originalSettings = extracted.structure.allProjectRefs
+    val newSettings: Seq[Def.Setting[Task[Seq[String]]]] = extracted.structure.allProjectRefs map { projRef =>
       val projectName = projRef.project
       println("canve instrumenting project " + projectName)
       
@@ -55,8 +55,21 @@ object ExtractorSbtPlugin extends AutoPlugin {
       }
       scalacOptions in projRef ++= ScalacOptions.value
     }
-    extracted.append(newSettings, state)
-  }
+    val newState = extracted.append(newSettings, state)
 
-  println("sbt canve plugin loaded - use " + sbtCommandName + " to run canve as part of every compilation")
+    val structure = extracted.structure
+    
+    extracted.structure.allProjectRefs map { projRef =>
+      println(projRef)
+      EvaluateTask(structure, clean, newState, projRef)
+      EvaluateTask(structure, compile in Test, newState, projRef)
+    }
+
+    println("canve task done")
+
+    newState
+    
+  }
+  
+  println("sbt canve plugin loaded - use " + sbtLegacyCommandName + " to run canve as part of every compilation")
 }

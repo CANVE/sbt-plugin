@@ -4,10 +4,7 @@ import sbt.Keys._
 import sbt._
 
 import org.canve.compilerPlugin.Normalize
-//import org.canve.simplest.Foo
-
-import java.io.File
-import com.github.tototoshi.csv._
+import sbt.inc.Analysis
 
 // TODO: add cleanup as per http://www.scala-sbt.org/0.13.5/docs/Getting-Started/More-About-Settings.html#appending-with-dependencies-and
 
@@ -15,35 +12,22 @@ object Plugin extends AutoPlugin {
   
   override def requires = plugins.JvmPlugin
   override def trigger = allRequirements
-
-  try { 
-    CSVReader.open(new File("whatever")).allWithHeaders
-  } 
-    catch {
-      case t: Throwable =>
-        println(t)
-    }
-    finally {
-      println("sbt plugin loaded")
-    }
-    
-  //val a = new Foo
   
   val compilerPluginOrg = "canve"
   val compilerPluginVersion = "0.0.1"
   val compilerPluginArtifact = "compiler-plugin"
   val compilerPluginNameProperty = "canve" // this is defined in the compiler plugin's code
     
-  val sbtLegacyCommandName = "canve"
-
   val sbtCommandName = "canve"
 
   // see: https://github.com/sbt/sbt/issues/1095 or https://github.com/sbt/sbt/issues/780
-  val aggregateFilter: ScopeFilter.ScopeFilter = ScopeFilter( inAggregates(ThisProject), inConfigurations(Compile) ) 
+  val aggregateFilter: ScopeFilter.ScopeFilter = ScopeFilter( inAggregates(ThisProject), inConfigurations(Compile) )
+
+  //val canveCommand: Command = Command(sbtCommandName)(){ ()}
 
   // global settings needed for the bootstrap
   override lazy val projectSettings = Seq(
-    commands += Command.command(sbtLegacyCommandName,
+    commands += Command.command(sbtCommandName,
                                 "Instruments all projects in the current build definition such that they run canve during compilation",
                                 "Instrument all projects in the current build definition such that they run canve during compilation")
                                 (instrument()),
@@ -58,7 +42,7 @@ object Plugin extends AutoPlugin {
     
     val newSettings: Seq[Def.Setting[Task[Seq[String]]]] = extracted.structure.allProjectRefs map { projRef =>
       val projectName = projRef.project
-      println("canve instrumenting project " + projectName)
+      //println("canve instrumenting project " + projectName)
       
       lazy val pluginScalacOptions: Def.Initialize[Task[Seq[String]]] = Def.task {
         // search for the compiler plugin
@@ -75,23 +59,38 @@ object Plugin extends AutoPlugin {
       }
       scalacOptions in projRef ++= pluginScalacOptions.value
     }
-    val oldState: Task[Seq[String]] = extracted.get(scalacOptions)
-    val newState = extracted.append(newSettings, state)
+    val appendedState = extracted.append(newSettings, state)
 
     val structure = extracted.structure
 
-    extracted.structure.allProjectRefs map { projRef =>
-      println(projRef)
-      EvaluateTask(structure, clean, newState, projRef)           // TODO: if returns None ==> error
-      EvaluateTask(structure, compile in Test, newState, projRef) // TODO: if returns None ==> error
-      val a = new Normalize
-        
+    val successfulProjects = (for (projRef <- extracted.structure.allProjectRefs.toStream) yield {
+      EvaluateTask(structure, clean, appendedState, projRef) match {
+        case None =>
+          throw new Exception("sbt plugin internal error - failed to evaluate the clean task")
+        case _ =>
+          EvaluateTask(structure, compile in Test, appendedState, projRef) match {
+            case None =>
+              throw new Exception("sbt plugin internal error - failed to evaluate the compile task")
+            case Some((resultState, result)) => result.toEither match {
+              case Left(incomplete: Incomplete) =>
+                false
+              case Right(analysis) =>
+                true
+            }
+            case _ => throw new Exception("sbt plugin internal error - unexpected result from sbt api")
+          }
+      }
+    }).takeWhile(_ == true).force
+
+    successfulProjects.length == extracted.structure.allProjectRefs.length match {
+      case true =>
+        new Normalize
+        println("canve task done")
+        state
+      case false =>
+        println("canve task aborted as it could not successfully compile the project")
+        state.fail
     }
-
-    println("canve task done")
-
-    state
-    
   }
   
   //println("sbt canve plugin loaded - use " + sbtLegacyCommandName + " to run canve as part of every compilation")

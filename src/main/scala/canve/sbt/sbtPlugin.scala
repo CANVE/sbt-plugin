@@ -4,7 +4,6 @@ import sbt.Keys._
 import sbt._
 
 import org.canve.compilerPlugin.Normalize
-import sbt.inc.Analysis
 
 // TODO: add cleanup as per http://www.scala-sbt.org/0.13.5/docs/Getting-Started/More-About-Settings.html#appending-with-dependencies-and
 
@@ -30,16 +29,18 @@ object Plugin extends AutoPlugin {
     commands += Command.command(sbtCommandName,
                                 "Instruments all projects in the current build definition such that they run canve during compilation",
                                 "Instrument all projects in the current build definition such that they run canve during compilation")
-                                (instrument()),
+                                (go()),
 
     libraryDependencies += compilerPluginOrg % (compilerPluginArtifact + "_" + scalaBinaryVersion.value) % compilerPluginVersion % "provided"
     
   )
 
-  private def instrument(): State => State = { state =>
-    val extracted: Extracted = Project.extract(state)
-    val originalSettings = extracted.structure
+  private def go(): State => State = { state =>
     
+    org.canve.util.CanveDataIO.clearAll
+        
+    val extracted: Extracted = Project.extract(state)
+
     val newSettings: Seq[Def.Setting[Task[Seq[String]]]] = extracted.structure.allProjectRefs map { projRef =>
       val projectName = projRef.project
       //println("canve instrumenting project " + projectName)
@@ -51,9 +52,13 @@ object Plugin extends AutoPlugin {
           case None => throw new Exception(s"Fatal: compilerPluginArtifact not in libraryDependencies")
           case Some(pluginPath) => 
             Seq(
-              Some(s"-Yrangepos"),                                             // enables obtaining source ranges in the compiler plugin
+                
+              Some(s"-Yrangepos"),                                             // enables obtaining accurate source ranges in the compiler plugin
+                                                                               // but will crash with some scala 2.10 projects using macros (c.f. https://github.com/scoverage/scalac-scoverage-plugin/blob/master/2.10.md)
               Some(s"-Xplugin:${pluginPath.getAbsolutePath}"),                 // hooks in the compiler plugin
+              
               Some(s"-P:$compilerPluginNameProperty:projectName:$projectName") // passes the project name
+              
             ).flatten
         }
       }
@@ -88,10 +93,10 @@ object Plugin extends AutoPlugin {
         println("canve task done")
         state
       case false =>
-        println("canve task aborted as it could not successfully compile the project")
+        println("canve task aborted as it could not successfully compile the project (or due to its own internal error)")
         state.fail
     }
   }
   
-  //println("sbt canve plugin loaded - use " + sbtLegacyCommandName + " to run canve as part of every compilation")
+  println("sbt canve plugin loaded - use " + sbtCommandName + " to run canve")
 }

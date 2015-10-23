@@ -98,5 +98,5 @@ object Plugin extends AutoPlugin {
     }
   }
   
-  println("sbt canve plugin loaded - use " + sbtCommandName + " to run canve")
+  println(s"[canve] sbt canve plugin loaded - enter the command `$sbtCommandName` in sbt, to run canve for your project")
 }
